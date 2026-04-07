@@ -196,7 +196,7 @@ function calculatePathPoints(coords, intervalMeters, offsetMeters = 0) {
         const currentPoint = coords[i];
 
         // Calculate distance between last_point and current_point
-        const segmentDistance = haversineDistance(
+        let segmentDistance = haversineDistance(
             lastPoint[0], lastPoint[1],
             currentPoint[0], currentPoint[1]
         );
