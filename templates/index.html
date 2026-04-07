@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KML Path Marker Generator</title>
+    <link rel="stylesheet" href="static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS for map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>KML Path Marker Generator</h1>
+            <p class="subtitle">Generate placemarkers along a path with customizable interval and offset</p>
+        </header>
+
+        <main>
+            <div class="card">
+                <form id="kmlForm" enctype="multipart/form-data">
+                     <div class="form-group">
+                         <label for="kml_file">Upload KML File</label>
+                         <input type="file" id="kml_file" name="kml_file" accept=".kml">
+                         <small>Upload a KML file containing a LineString (path/route) or use the paste option below</small>
+                     </div>
+
+                    <!-- XML Paste Component -->
+                    <div class="form-group xml-paste-section">
+                        <div class="xml-section-header">
+                            <label>Alternative Input: Paste XML/KML</label>
+                            <button type="button" id="pasteFromClipboardBtn" class="btn btn-secondary btn-small">
+                                <span class="btn-icon">📋</span> Paste from Clipboard
+                            </button>
+                        </div>
+                        <small>Paste KML or XML content directly from your clipboard instead of uploading a file</small>
+
+                        <!-- XML Editor -->
+                        <div id="xmlEditor" class="xml-editor" style="display: none;">
+                            <div class="xml-editor-header">
+                                <span>XML Content</span>
+                                <button type="button" id="formatXmlBtn" class="btn btn-secondary btn-small">Format</button>
+                            </div>
+                            <textarea id="xmlContent" class="xml-textarea" placeholder="Paste your KML/XML here..."></textarea>
+                        </div>
+
+                        <!-- Parse Status -->
+                        <div id="xmlParseStatus" class="xml-parse-status" style="display: none;"></div>
+
+                        <!-- XML Structure Preview -->
+                        <div id="xmlPreview" class="xml-preview" style="display: none;">
+                            <div class="xml-preview-header">
+                                <span>Structure Preview</span>
+                                <button type="button" id="toggleTreeView" class="btn btn-secondary btn-small">Toggle View</button>
+                            </div>
+                            <div id="xmlTreeView" class="xml-tree-view"></div>
+                            <div id="xmlRawView" class="xml-raw-view" style="display: none;"></div>
+                        </div>
+
+                        <!-- Validation Errors -->
+                        <div id="xmlValidationErrors" class="validation-errors" style="display: none;">
+                            <h4>Validation Issues:</h4>
+                            <ul id="errorList"></ul>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div id="xmlActionButtons" class="xml-action-buttons" style="display: none;">
+                            <button type="button" id="useXmlDataBtn" class="btn btn-primary">Use This Data</button>
+                            <button type="button" id="clearXmlBtn" class="btn btn-secondary">Clear</button>
+                        </div>
+
+                        <!-- Loading Indicator -->
+                        <div id="xmlLoading" class="xml-loading" style="display: none;">
+                            <div class="spinner"></div>
+                            <span>Processing XML...</span>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="interval">Interval (meters)</label>
+                            <input type="number" id="interval" name="interval" value="60" min="1" max="1000" step="1" required>
+                            <small>Distance between markers (1-1000m)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="offset">Offset (meters)</label>
+                            <input type="range" id="offsetSlider" name="offsetSlider" min="-100" max="100" value="0" step="1" style="width: 100%;">
+                            <div class="slider-value">
+                                <span id="offsetValue">0</span> m
+                                <small>Drag slider or use input below</small>
+                            </div>
+                             <input type="number" id="offset" name="offset" value="0" min="-1000" max="1000" step="0.1" style="margin-top: 8px;">
+                             <small>Perpendicular offset: positive = right, negative = left</small>
+                         </div>
+                     </div>
+
+
+                     <div class="form-row">
+                        <div class="form-group">
+                            <label for="marker_label">Marker Label</label>
+                            <input type="text" id="marker_label" name="marker_label" value="TB" maxlength="10">
+                            <small>Prefix for marker names (TB1, TB2, ...)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="color">Marker Color</label>
+                            <input type="color" id="color" name="color" value="#000000">
+                            <small>Black (KML format: aabbggrr)</small>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="button" id="previewBtn" class="btn btn-secondary">Preview Path</button>
+                        <button type="submit" class="btn btn-primary">Generate KML</button>
+                    </div>
+                </form>
+
+                <div id="previewInfo" class="preview-info" style="display: none;">
+                    <h3>Path Information</h3>
+                    <p><strong>Points in path:</strong> <span id="previewPoints">-</span></p>
+                    <p><strong>Total distance:</strong> <span id="previewDistance">-</span> meters</p>
+                    <p><strong>Suggested markers:</strong> <span id="previewSuggested">-</span></p>
+                </div>
+
+                <div id="statusMessage" class="status-message" style="display: none;"></div>
+            </div>
+
+            <div class="instructions">
+                <h2>Interactive Map Preview</h2>
+                <p>The map below shows your uploaded path and calculated markers. Use the offset slider to see how markers shift perpendicular to the path in real-time.</p>
+
+                <div id="map" class="map-container"></div>
+
+                <h2>How to Use</h2>
+                <ol>
+                    <li><strong>Create a path in Google Earth:</strong>
+                        <ul>
+                            <li>Open Google Earth Pro (desktop) or Google Earth Web</li>
+                            <li>Use the "Add Path" or "Add Line" tool to draw your route</li>
+                            <li>Save/Export the path as a KML file</li>
+                        </ul>
+                    </li>
+                    <li><strong>Upload the KML file</strong> using the form above</li>
+                    <li><strong>Configure options:</strong>
+                        <ul>
+                            <li><strong>Interval:</strong> Set the distance between markers (e.g., 60 meters)</li>
+                            <li><strong>Offset:</strong> Use the slider to shift markers perpendicular to the path. Positive values move to the right, negative to the left (as you face the direction of the path). Use this to place markers on the sidewalk.</li>
+                            <li><strong>Label & Color:</strong> Customize marker appearance</li>
+                        </ul>
+                    </li>
+                    <li><strong>Click "Generate KML"</strong> to download the output file</li>
+                    <li><strong>Import into Google Earth:</strong> File → Import → select the downloaded KML</li>
+                </ol>
+
+                <div class="note">
+                    <h4>About Offset</h4>
+                    <p>The offset shifts markers perpendicular to the path direction. This is useful when your path follows the center of a road and you want markers on the sidewalk.</p>
+                    <p><strong>Example:</strong> If your path is along the road center and you want markers on the right sidewalk, use a positive offset equal to half the road width plus the distance to the sidewalk.</p>
+                    <p><strong>Interactive Preview:</strong> The map shows both the original path (blue line) and the marker positions (red dots). Drag the offset slider to see markers move in real-time. You can also drag individual markers to fine-tune their position if needed.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>KML Path Marker Generator - Pure JavaScript Client-Side Application</p>
+        </footer>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Application Scripts -->
+    <script src="static/kml-processor.js"></script>
+    <script src="static/app.js"></script>
+</body>
+</html>
